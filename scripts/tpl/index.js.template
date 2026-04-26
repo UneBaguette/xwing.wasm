@@ -1,0 +1,4 @@
+// xwing-wasm-rs. Auto-generated entry point
+// Do not edit directly!
+
+export { generateKeypair, encapsulate, decapsulate } from './bundler/xwing.js';

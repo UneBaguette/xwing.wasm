@@ -3,12 +3,27 @@ use x_wing::{
     EncapsulationKey, XWingKem,
     kem::{Decapsulate, Encapsulate, Kem, KeyExport},
 };
+use zeroize::{Zeroize, Zeroizing};
+
+#[cfg(all(
+    not(target_feature = "atomics"),
+    target_family = "wasm",
+    feature = "talc"
+))]
+#[global_allocator]
+static TALC: talc::wasm::WasmDynamicTalc = talc::wasm::new_wasm_dynamic_allocator();
 
 pub const SHARED_KEY_SIZE: usize = 32;
 
 pub struct KeyPair {
     pub sk: [u8; DECAPSULATION_KEY_SIZE], // 32
     pub pk: [u8; ENCAPSULATION_KEY_SIZE], // 1216
+}
+
+impl Drop for KeyPair {
+    fn drop(&mut self) {
+        self.sk.zeroize();
+    }
 }
 
 pub fn generate_keypair() -> KeyPair {
@@ -25,6 +40,12 @@ pub fn generate_keypair() -> KeyPair {
 pub struct EncapsulateResult {
     pub ciphertext: [u8; CIPHERTEXT_SIZE], // 1120
     pub shared_key: [u8; SHARED_KEY_SIZE], // 32
+}
+
+impl Drop for EncapsulateResult {
+    fn drop(&mut self) {
+        self.shared_key.zeroize();
+    }
 }
 
 pub fn encapsulate(
@@ -47,19 +68,20 @@ pub fn encapsulate(
 pub fn decapsulate(
     sk_bytes: &[u8; DECAPSULATION_KEY_SIZE],
     ct_bytes: &[u8; CIPHERTEXT_SIZE],
-) -> [u8; SHARED_KEY_SIZE] {
+) -> Zeroizing<[u8; SHARED_KEY_SIZE]> {
     let sk = DecapsulationKey::from(*sk_bytes);
     let ct = Ciphertext::from(*ct_bytes);
     let ss = sk.decapsulate(&ct);
     let mut ss_bytes = [0u8; SHARED_KEY_SIZE];
     ss_bytes.copy_from_slice(&ss);
 
-    ss_bytes
+    Zeroizing::new(ss_bytes)
 }
 
 #[cfg(feature = "wasm")]
 mod wasm {
     use super::*;
+    #[cfg(feature = "wasm")]
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     use serde::{Deserialize, Serialize};
     use tsify::Tsify;
@@ -152,7 +174,7 @@ mod tests {
         let enc = encapsulate(&kp.pk).unwrap();
         let ss = decapsulate(&kp.sk, &enc.ciphertext);
 
-        assert_eq!(enc.shared_key, ss);
+        assert_eq!(enc.shared_key, *ss);
     }
 
     #[test]
@@ -182,7 +204,7 @@ mod tests {
         let enc = encapsulate(&kp1.pk).unwrap();
         let ss = decapsulate(&kp2.sk, &enc.ciphertext);
 
-        assert_ne!(enc.shared_key, ss);
+        assert_ne!(enc.shared_key, *ss);
     }
 
     #[test]
