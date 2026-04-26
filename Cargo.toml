@@ -1,0 +1,39 @@
+[package]
+name = "xwing-wasm-rs"
+version = "0.1.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+authors = ["UneBaguette <tom@unebaguette.fr>"]
+publish = false
+repository = "https://github.com/UneBaguette/xwing.wasm"
+description = "X-Wing hybrid KEM (ML-KEM-768 + X25519) with WASM bindings"
+readme = "README.md"
+keywords = ["crypto", "xwing", "kem", "post-quantum", "wasm"]
+categories = ["cryptography", "wasm"]
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:tsify"]
+talc = ["dep:talc"]
+
+[dependencies]
+x-wing = { version = "0.1.0-rc", features = ["getrandom", "zeroize"] }
+base64 = "0.22"
+serde = { version = "1.0", features = ["derive"] }
+
+# WASM deps (optional)
+wasm-bindgen = { version = "=0.2.118", optional = true }
+serde-wasm-bindgen = { version = "0.6", optional = true }
+tsify = { version = "0.5", features = ["js"], optional = true }
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.4", features = ["wasm_js"] }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+talc = { version = "5", optional = true }
