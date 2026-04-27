@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Copyright 2026 Thomas <tom@unebaguette.fr>
+
 use x_wing::{
     CIPHERTEXT_SIZE, Ciphertext, DECAPSULATION_KEY_SIZE, DecapsulationKey, ENCAPSULATION_KEY_SIZE,
     EncapsulationKey, XWingKem,
