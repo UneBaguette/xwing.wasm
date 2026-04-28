@@ -152,7 +152,7 @@ mod wasm {
         let sk_bytes = decode_fixed::<DECAPSULATION_KEY_SIZE>(sk, "secretKey")?;
         let ct_bytes = decode_fixed::<CIPHERTEXT_SIZE>(ciphertext, "ciphertext")?;
 
-        Ok(encode(&super::decapsulate(&sk_bytes, &ct_bytes)))
+        Ok(encode(&*super::decapsulate(&sk_bytes, &ct_bytes)))
     }
 }
 

@@ -53,9 +53,10 @@ wasm:
 	@cp LICENSE-APACHE $(PKG_DIR)/LICENSE-APACHE
 	@cp scripts/tpl/index.js.template $(PKG_DIR)/index.js
 	@cp scripts/tpl/index.d.ts $(PKG_DIR)/index.d.ts
+	@sed -i 's|// @ts-nocheck||' $(PKG_DIR)/index.d.ts
 	@node -e "\
 	   const pkg = {\
-	      name: 'xwing-wasm-rs',\
+	      name: 'xwing-wasm',\
 	      version: '$(VERSION)',\
 	      description: 'X-Wing hybrid KEM (ML-KEM-768 + X25519) via Rust/WASM',\
 	      license: 'MIT OR Apache-2.0',\
