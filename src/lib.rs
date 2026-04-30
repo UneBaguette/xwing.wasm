@@ -57,8 +57,10 @@ pub fn encapsulate(
     let pk =
         EncapsulationKey::try_from(pk_bytes.as_slice()).map_err(|_| "invalid encapsulation key")?;
     let (ct, ss) = pk.encapsulate();
+
     let mut ct_bytes = [0u8; CIPHERTEXT_SIZE];
     ct_bytes.copy_from_slice(&ct);
+
     let mut ss_bytes = [0u8; SHARED_KEY_SIZE];
     ss_bytes.copy_from_slice(&ss);
 
@@ -76,6 +78,7 @@ pub fn decapsulate(
     let ct = Ciphertext::from(*ct_bytes);
     let ss = sk.decapsulate(&ct);
     let mut ss_bytes = [0u8; SHARED_KEY_SIZE];
+
     ss_bytes.copy_from_slice(&ss);
 
     Zeroizing::new(ss_bytes)
@@ -110,11 +113,10 @@ mod wasm {
     }
 
     #[derive(Debug, Serialize, Deserialize, Tsify)]
-    #[tsify(into_wasm_abi)]
+    #[tsify(into_wasm_abi)] // TODO: remove once deprecated
+    #[serde(rename_all = "camelCase")]
     pub struct GenerateKeypairResult {
-        #[serde(rename = "secretKey")]
         pub secret_key: String,
-        #[serde(rename = "publicKey")]
         pub public_key: String,
     }
 
@@ -129,7 +131,7 @@ mod wasm {
     }
 
     #[derive(Debug, Serialize, Deserialize, Tsify)]
-    #[tsify(into_wasm_abi)]
+    #[tsify(into_wasm_abi)] // TODO: remove once deprecated
     pub struct EncapsulateResult {
         pub ciphertext: String,
         #[serde(rename = "sharedKey")]
