@@ -87,37 +87,28 @@ pub fn decapsulate(
 #[cfg(feature = "wasm")]
 mod wasm {
     use super::*;
-    #[cfg(feature = "wasm")]
-    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
     use serde::{Deserialize, Serialize};
     use tsify::Tsify;
     use wasm_bindgen::prelude::*;
 
-    fn encode(bytes: &[u8]) -> String {
-        URL_SAFE_NO_PAD.encode(bytes)
-    }
-
-    fn decode(s: &str, context: &str) -> Result<Vec<u8>, JsError> {
-        URL_SAFE_NO_PAD
-            .decode(s)
-            .map_err(|_| JsError::new(&format!("invalid base64 at {context}")))
-    }
-
-    fn decode_fixed<const N: usize>(s: &str, context: &str) -> Result<[u8; N], JsError> {
-        let bytes = decode(s, context)?;
-
-        bytes
-            .as_slice()
-            .try_into()
-            .map_err(|_| JsError::new(&format!("{context} must be {N} bytes")))
-    }
-
-    #[derive(Debug, Serialize, Deserialize, Tsify)]
+    #[derive(Serialize, Deserialize, Tsify)]
     #[tsify(into_wasm_abi)] // TODO: remove once deprecated
     #[serde(rename_all = "camelCase")]
     pub struct GenerateKeypairResult {
-        pub secret_key: String,
-        pub public_key: String,
+        #[serde(with = "serde_bytes")]
+        pub secret_key: Vec<u8>,
+        #[serde(with = "serde_bytes")]
+        pub public_key: Vec<u8>,
+    }
+
+    #[derive(Serialize, Deserialize, Tsify)]
+    #[tsify(into_wasm_abi)] // TODO: remove once deprecated
+    #[serde(rename_all = "camelCase")]
+    pub struct EncapsulateResult {
+        #[serde(with = "serde_bytes")]
+        pub ciphertext: Vec<u8>,
+        #[serde(with = "serde_bytes")]
+        pub shared_key: Vec<u8>,
     }
 
     #[wasm_bindgen(js_name = "generateKeypair")]
@@ -125,36 +116,36 @@ mod wasm {
         let kp = generate_keypair();
 
         GenerateKeypairResult {
-            secret_key: encode(&kp.sk),
-            public_key: encode(&kp.pk),
+            secret_key: kp.sk.to_vec(),
+            public_key: kp.pk.to_vec(),
         }
     }
 
-    #[derive(Debug, Serialize, Deserialize, Tsify)]
-    #[tsify(into_wasm_abi)] // TODO: remove once deprecated
-    pub struct EncapsulateResult {
-        pub ciphertext: String,
-        #[serde(rename = "sharedKey")]
-        pub shared_key: String,
-    }
-
     #[wasm_bindgen]
-    pub fn encapsulate(pk: &str) -> Result<EncapsulateResult, JsError> {
-        let pk_bytes = decode_fixed::<ENCAPSULATION_KEY_SIZE>(pk, "publicKey")?;
-        let result = super::encapsulate(&pk_bytes).map_err(|e| JsError::new(e))?;
+    pub fn encapsulate(pk: &[u8]) -> Result<EncapsulateResult, JsError> {
+        let pk_bytes: &[u8; ENCAPSULATION_KEY_SIZE] = pk
+            .try_into()
+            .map_err(|_| JsError::new("publicKey must be 1216 bytes"))?;
+
+        let result = super::encapsulate(pk_bytes).map_err(|e| JsError::new(e))?;
 
         Ok(EncapsulateResult {
-            ciphertext: encode(&result.ciphertext),
-            shared_key: encode(&result.shared_key),
+            ciphertext: result.ciphertext.to_vec(),
+            shared_key: result.shared_key.to_vec(),
         })
     }
 
     #[wasm_bindgen]
-    pub fn decapsulate(sk: &str, ciphertext: &str) -> Result<String, JsError> {
-        let sk_bytes = decode_fixed::<DECAPSULATION_KEY_SIZE>(sk, "secretKey")?;
-        let ct_bytes = decode_fixed::<CIPHERTEXT_SIZE>(ciphertext, "ciphertext")?;
+    pub fn decapsulate(sk: &[u8], ciphertext: &[u8]) -> Result<Vec<u8>, JsError> {
+        let sk_bytes: &[u8; DECAPSULATION_KEY_SIZE] = sk
+            .try_into()
+            .map_err(|_| JsError::new("secretKey must be 32 bytes"))?;
 
-        Ok(encode(&*super::decapsulate(&sk_bytes, &ct_bytes)))
+        let ct_bytes: &[u8; CIPHERTEXT_SIZE] = ciphertext
+            .try_into()
+            .map_err(|_| JsError::new("ciphertext must be 1120 bytes"))?;
+
+        Ok(super::decapsulate(sk_bytes, ct_bytes).to_vec())
     }
 }
 
@@ -252,32 +243,79 @@ mod wasm_tests {
     }
 
     #[wasm_bindgen_test]
-    fn wasm_invalid_pk_base64() {
-        assert!(encapsulate("not-valid-base64!!!").is_err());
+    fn wasm_different_keypairs_different_shared_keys() {
+        let kp1 = generate_keypair_wasm();
+        let kp2 = generate_keypair_wasm();
+        let enc1 = encapsulate(&kp1.public_key).unwrap();
+        let enc2 = encapsulate(&kp2.public_key).unwrap();
+
+        assert_ne!(enc1.shared_key, enc2.shared_key);
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_encapsulate_twice_different_ciphertext() {
+        let kp = generate_keypair_wasm();
+        let enc1 = encapsulate(&kp.public_key).unwrap();
+        let enc2 = encapsulate(&kp.public_key).unwrap();
+
+        assert_ne!(enc1.ciphertext, enc2.ciphertext);
+        assert_ne!(enc1.shared_key, enc2.shared_key);
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_wrong_sk_wrong_shared_key() {
+        let kp1 = generate_keypair_wasm();
+        let kp2 = generate_keypair_wasm();
+        let enc = encapsulate(&kp1.public_key).unwrap();
+        let ss = decapsulate(&kp2.secret_key, &enc.ciphertext).unwrap();
+
+        assert_ne!(enc.shared_key, ss);
     }
 
     #[wasm_bindgen_test]
     fn wasm_wrong_pk_length() {
-        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-        let short = URL_SAFE_NO_PAD.encode(&[0u8; 32]);
-
-        assert!(encapsulate(&short).is_err());
+        assert!(encapsulate(&[0u8; 32]).is_err());
     }
 
     #[wasm_bindgen_test]
-    fn wasm_invalid_sk_base64() {
+    fn wasm_wrong_sk_length() {
         let kp = generate_keypair_wasm();
         let enc = encapsulate(&kp.public_key).unwrap();
 
-        assert!(decapsulate("bad-base64!!!", &enc.ciphertext).is_err());
+        assert!(decapsulate(&[0u8; 16], &enc.ciphertext).is_err());
     }
 
     #[wasm_bindgen_test]
     fn wasm_wrong_ct_length() {
-        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
         let kp = generate_keypair_wasm();
-        let short_ct = URL_SAFE_NO_PAD.encode(&[0u8; 32]);
 
-        assert!(decapsulate(&kp.secret_key, &short_ct).is_err());
+        assert!(decapsulate(&kp.secret_key, &[0u8; 32]).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_empty_pk() {
+        assert!(encapsulate(&[]).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_empty_sk_and_ct() {
+        assert!(decapsulate(&[], &[]).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_keypair_sizes() {
+        let kp = generate_keypair_wasm();
+
+        assert_eq!(kp.secret_key.len(), 32);
+        assert_eq!(kp.public_key.len(), 1216);
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_ciphertext_and_shared_key_sizes() {
+        let kp = generate_keypair_wasm();
+        let enc = encapsulate(&kp.public_key).unwrap();
+
+        assert_eq!(enc.ciphertext.len(), 1120);
+        assert_eq!(enc.shared_key.len(), 32);
     }
 }

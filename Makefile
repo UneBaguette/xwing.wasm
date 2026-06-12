@@ -81,7 +81,7 @@ wasm-clean:
 .PHONY: publish-wasm
 
 publish-wasm: wasm
-	cd $(PKG_DIR) && npm publish --access public
+	cd $(PKG_DIR) && npm publish
 
 # All
 
