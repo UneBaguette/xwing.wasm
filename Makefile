@@ -43,6 +43,7 @@ wasm:
 	$(WASM_BINDGEN) --target web --out-dir $(PKG_DIR)/web --out-name xwing $(TARGET_DIR)/$(CRATE_NAME).wasm
 	$(WASM_BINDGEN) --target nodejs --out-dir $(PKG_DIR)/node --out-name xwing $(TARGET_DIR)/$(CRATE_NAME).wasm
 	@mv $(PKG_DIR)/bundler/xwing_bg.wasm $(PKG_DIR)/xwing_bg.wasm
+	@cp $(PKG_DIR)/bundler/xwing_bg.js $(PKG_DIR)/xwing_bg.js
 	@rm -f $(PKG_DIR)/web/xwing_bg.wasm $(PKG_DIR)/node/xwing_bg.wasm
 	$(WASM_OPT) $(WASM_OPT_FLAGS) $(PKG_DIR)/xwing_bg.wasm -o $(PKG_DIR)/xwing_bg.wasm
 	@node -e "['bundler','web','node'].forEach(d=>{const f='$(PKG_DIR)/'+d+'/xwing.js';require('fs').writeFileSync(f,require('fs').readFileSync(f,'utf8').replace(/xwing_bg\.wasm/g,'../xwing_bg.wasm'))})"
