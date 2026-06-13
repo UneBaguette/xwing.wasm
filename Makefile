@@ -69,7 +69,7 @@ wasm:
 	         import: './index.js',\
 	         default: './web/xwing.js'\
 	      }},\
-	      files: ['bundler/', 'web/', 'node/', 'index.js', 'index.d.ts', 'xwing_bg.wasm', 'README.md', 'LICENSE-MIT', 'LICENSE-APACHE'],\
+	      files: ['bundler/', 'web/', 'node/', 'index.js', 'index.d.ts', 'xwing_bg.wasm', 'xwing_bg.js', 'README.md', 'LICENSE-MIT', 'LICENSE-APACHE'],\
 	      keywords: ['xwing', 'x-wing', 'kem', 'post-quantum', 'ml-kem', 'x25519', 'wasm', 'crypto']\
 	   };\
 	   require('fs').writeFileSync('./$(PKG_DIR)/package.json', JSON.stringify(pkg, null, 2) + '\n');"
