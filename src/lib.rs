@@ -95,9 +95,9 @@ mod wasm {
     #[tsify(into_wasm_abi)] // TODO: remove once deprecated
     #[serde(rename_all = "camelCase")]
     pub struct GenerateKeypairResult {
-        #[serde(with = "serde_bytes")]
+        #[tsify(type = "Uint8Array")]
         pub secret_key: Vec<u8>,
-        #[serde(with = "serde_bytes")]
+        #[tsify(type = "Uint8Array")]
         pub public_key: Vec<u8>,
     }
 
@@ -105,9 +105,9 @@ mod wasm {
     #[tsify(into_wasm_abi)] // TODO: remove once deprecated
     #[serde(rename_all = "camelCase")]
     pub struct EncapsulateResult {
-        #[serde(with = "serde_bytes")]
+        #[tsify(type = "Uint8Array")]
         pub ciphertext: Vec<u8>,
-        #[serde(with = "serde_bytes")]
+        #[tsify(type = "Uint8Array")]
         pub shared_key: Vec<u8>,
     }
 
