@@ -65,8 +65,9 @@ wasm:
 	      main: 'index.js',\
 	      types: 'index.d.ts',\
 	      exports: { '.': {\
-	         node: { require: './node/xwing.js', import: './index.js' },\
-	         import: './index.js',\
+	         node: { require: './node/xwing.js', import: './node/xwing.js' },\
+	         webpack: './bundler/xwing.js',\
+	         import: './web/xwing.js',\
 	         default: './web/xwing.js'\
 	      }},\
 	      files: ['bundler/', 'web/', 'node/', 'index.js', 'index.d.ts', 'xwing_bg.wasm', 'xwing_bg.js', 'README.md', 'LICENSE-MIT', 'LICENSE-APACHE'],\
