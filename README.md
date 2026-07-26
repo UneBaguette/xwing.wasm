@@ -54,7 +54,7 @@ assert_eq!(enc.shared_key, *ss);
 
 - Secret key and shared key **zeroized** on drop
 - Decapsulate returns `Zeroizing<[u8; 32]>` for automatic cleanup
-- Based on [`x-wing`](https://crates.io/crates/x-wing) by **RustCrypto** (unaudited)
+- Based on [`x-wing`](https://crates.io/crates/x-wing) v0.1.0 by **RustCrypto** (unaudited)
 - Reference: [X-Wing: The Hybrid KEM You've Been Looking For](https://eprint.iacr.org/2024/039)
 
 ## License
