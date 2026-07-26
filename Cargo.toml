@@ -20,12 +20,12 @@ wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:tsify"]
 talc = ["dep:talc"]
 
 [dependencies]
-x-wing = { version = "0.1.0-rc", features = ["getrandom", "zeroize"] }
+x-wing = { version = "0.1", features = ["getrandom", "zeroize"] }
 serde = { version = "1.0", features = ["derive"] }
 zeroize = { version = "1", features = ["derive"] }
 
 # WASM deps (optional)
-wasm-bindgen = { version = "=0.2.123", optional = true }
+wasm-bindgen = { version = "=0.2.126", optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 tsify = { version = "0.5", features = ["js"], optional = true }
 
