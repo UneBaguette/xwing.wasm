@@ -88,51 +88,57 @@ pub fn decapsulate(
 mod wasm {
     use super::*;
     use serde::{Deserialize, Serialize};
-    use tsify::Tsify;
+    use tsify::{Ts, Tsify};
     use wasm_bindgen::prelude::*;
 
     #[derive(Serialize, Deserialize, Tsify)]
-    #[tsify(into_wasm_abi)] // TODO: remove once deprecated
     #[serde(rename_all = "camelCase")]
     pub struct GenerateKeypairResult {
         #[tsify(type = "Uint8Array")]
+        #[serde(with = "serde_bytes")]
         pub secret_key: Vec<u8>,
         #[tsify(type = "Uint8Array")]
+        #[serde(with = "serde_bytes")]
         pub public_key: Vec<u8>,
     }
 
     #[derive(Serialize, Deserialize, Tsify)]
-    #[tsify(into_wasm_abi)] // TODO: remove once deprecated
     #[serde(rename_all = "camelCase")]
     pub struct EncapsulateResult {
         #[tsify(type = "Uint8Array")]
+        #[serde(with = "serde_bytes")]
         pub ciphertext: Vec<u8>,
         #[tsify(type = "Uint8Array")]
+        #[serde(with = "serde_bytes")]
         pub shared_key: Vec<u8>,
     }
 
     #[wasm_bindgen(js_name = "generateKeypair")]
-    pub fn generate_keypair_wasm() -> GenerateKeypairResult {
+    pub fn generate_keypair_wasm() -> Result<Ts<GenerateKeypairResult>, JsError> {
         let kp = generate_keypair();
 
-        GenerateKeypairResult {
+        let result = GenerateKeypairResult {
             secret_key: kp.sk.to_vec(),
             public_key: kp.pk.to_vec(),
-        }
+        };
+
+        Ok(result.into_ts()?)
     }
 
     #[wasm_bindgen]
-    pub fn encapsulate(pk: &[u8]) -> Result<EncapsulateResult, JsError> {
+    pub fn encapsulate(pk: &[u8]) -> Result<Ts<EncapsulateResult>, JsError> {
         let pk_bytes: &[u8; ENCAPSULATION_KEY_SIZE] = pk
             .try_into()
             .map_err(|_| JsError::new("publicKey must be 1216 bytes"))?;
 
         let result = super::encapsulate(pk_bytes).map_err(|e| JsError::new(e))?;
 
-        Ok(EncapsulateResult {
+        let out = EncapsulateResult {
             ciphertext: result.ciphertext.to_vec(),
             shared_key: result.shared_key.to_vec(),
-        })
+        };
+
+        Ok(out.into_ts()?)
     }
 
     #[wasm_bindgen]
@@ -235,8 +241,8 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn wasm_roundtrip() {
-        let kp = generate_keypair_wasm();
-        let enc = encapsulate(&kp.public_key).unwrap();
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let enc = encapsulate(&kp.public_key).unwrap().to_rust().unwrap();
         let ss = decapsulate(&kp.secret_key, &enc.ciphertext).unwrap();
 
         assert_eq!(enc.shared_key, ss);
@@ -244,19 +250,19 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn wasm_different_keypairs_different_shared_keys() {
-        let kp1 = generate_keypair_wasm();
-        let kp2 = generate_keypair_wasm();
-        let enc1 = encapsulate(&kp1.public_key).unwrap();
-        let enc2 = encapsulate(&kp2.public_key).unwrap();
+        let kp1 = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let kp2 = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let enc1 = encapsulate(&kp1.public_key).unwrap().to_rust().unwrap();
+        let enc2 = encapsulate(&kp2.public_key).unwrap().to_rust().unwrap();
 
         assert_ne!(enc1.shared_key, enc2.shared_key);
     }
 
     #[wasm_bindgen_test]
     fn wasm_encapsulate_twice_different_ciphertext() {
-        let kp = generate_keypair_wasm();
-        let enc1 = encapsulate(&kp.public_key).unwrap();
-        let enc2 = encapsulate(&kp.public_key).unwrap();
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let enc1 = encapsulate(&kp.public_key).unwrap().to_rust().unwrap();
+        let enc2 = encapsulate(&kp.public_key).unwrap().to_rust().unwrap();
 
         assert_ne!(enc1.ciphertext, enc2.ciphertext);
         assert_ne!(enc1.shared_key, enc2.shared_key);
@@ -264,9 +270,9 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn wasm_wrong_sk_wrong_shared_key() {
-        let kp1 = generate_keypair_wasm();
-        let kp2 = generate_keypair_wasm();
-        let enc = encapsulate(&kp1.public_key).unwrap();
+        let kp1 = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let kp2 = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let enc = encapsulate(&kp1.public_key).unwrap().to_rust().unwrap();
         let ss = decapsulate(&kp2.secret_key, &enc.ciphertext).unwrap();
 
         assert_ne!(enc.shared_key, ss);
@@ -279,15 +285,15 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn wasm_wrong_sk_length() {
-        let kp = generate_keypair_wasm();
-        let enc = encapsulate(&kp.public_key).unwrap();
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let enc = encapsulate(&kp.public_key).unwrap().to_rust().unwrap();
 
         assert!(decapsulate(&[0u8; 16], &enc.ciphertext).is_err());
     }
 
     #[wasm_bindgen_test]
     fn wasm_wrong_ct_length() {
-        let kp = generate_keypair_wasm();
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
 
         assert!(decapsulate(&kp.secret_key, &[0u8; 32]).is_err());
     }
@@ -304,7 +310,7 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn wasm_keypair_sizes() {
-        let kp = generate_keypair_wasm();
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
 
         assert_eq!(kp.secret_key.len(), 32);
         assert_eq!(kp.public_key.len(), 1216);
@@ -312,8 +318,8 @@ mod wasm_tests {
 
     #[wasm_bindgen_test]
     fn wasm_ciphertext_and_shared_key_sizes() {
-        let kp = generate_keypair_wasm();
-        let enc = encapsulate(&kp.public_key).unwrap();
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let enc = encapsulate(&kp.public_key).unwrap().to_rust().unwrap();
 
         assert_eq!(enc.ciphertext.len(), 1120);
         assert_eq!(enc.shared_key.len(), 32);
