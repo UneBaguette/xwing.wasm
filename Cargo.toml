@@ -16,16 +16,16 @@ crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
-wasm = ["dep:wasm-bindgen", "dep:serde-wasm-bindgen", "dep:serde_bytes", "dep:tsify"]
+wasm = ["dep:wasm-bindgen", "dep:serde", "dep:serde-wasm-bindgen", "dep:serde_bytes", "dep:tsify"]
 talc = ["dep:talc"]
 
 [dependencies]
 x-wing = { version = "0.1", features = ["getrandom", "zeroize"] }
-serde = { version = "1.0", features = ["derive"] }
 zeroize = { version = "1", features = ["derive"] }
 
 # WASM deps (optional)
 wasm-bindgen = { version = "=0.2.129", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 serde_bytes = { version = "0.11", optional = true }
 tsify = { version = "0.5", features = ["js"], optional = true }
