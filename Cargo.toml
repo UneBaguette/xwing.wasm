@@ -1,6 +1,6 @@
 [package]
 name = "xwing-wasm-rs"
-version = "0.3.1"
+version = "0.3.2"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 authors = ["UneBaguette <tom@unebaguette.fr>"]
@@ -24,7 +24,7 @@ x-wing = { version = "0.1", features = ["getrandom", "zeroize"] }
 zeroize = { version = "1", features = ["derive"] }
 
 # WASM deps (optional)
-wasm-bindgen = { version = "=0.2.129", optional = true }
+wasm-bindgen = { version = "=0.2.130", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde-wasm-bindgen = { version = "0.6", optional = true }
 serde_bytes = { version = "0.11", optional = true }
