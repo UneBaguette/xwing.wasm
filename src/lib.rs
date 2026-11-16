@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 // Copyright 2026 Thomas <tom@unebaguette.fr>
 
+use x_wing::kem::{FromSeed, Seed};
 use x_wing::{
     CIPHERTEXT_SIZE, Ciphertext, DECAPSULATION_KEY_SIZE, DecapsulationKey, ENCAPSULATION_KEY_SIZE,
     EncapsulationKey, XWingKem,
@@ -31,6 +32,20 @@ impl Drop for KeyPair {
 
 pub fn generate_keypair() -> KeyPair {
     let (sk, pk) = XWingKem::generate_keypair();
+
+    let mut pk_bytes = [0u8; ENCAPSULATION_KEY_SIZE];
+
+    pk_bytes.copy_from_slice(&pk.to_bytes());
+
+    KeyPair {
+        sk: *sk.as_bytes(),
+        pk: pk_bytes,
+    }
+}
+
+pub fn generate_keypair_from_seed(seed: &Seed<XWingKem>) -> KeyPair {
+    let (sk, pk) = XWingKem::from_seed(seed);
+
     let mut pk_bytes = [0u8; ENCAPSULATION_KEY_SIZE];
     pk_bytes.copy_from_slice(&pk.to_bytes());
 
@@ -116,6 +131,21 @@ mod wasm {
     #[wasm_bindgen(js_name = "generateKeypair")]
     pub fn generate_keypair_wasm() -> Result<Ts<GenerateKeypairResult>, JsError> {
         let kp = generate_keypair();
+
+        let result = GenerateKeypairResult {
+            secret_key: kp.sk.to_vec(),
+            public_key: kp.pk.to_vec(),
+        };
+
+        Ok(result.into_ts()?)
+    }
+
+    #[wasm_bindgen(js_name = "generateKeypairFromSeed")]
+    pub fn generate_keypair_seed_wasm(seed: &[u8]) -> Result<Ts<GenerateKeypairResult>, JsError> {
+        let seed = <&Seed<XWingKem>>::try_from(seed)
+            .map_err(|_| JsError::new("Invalid X-Wing seed length"))?;
+
+        let kp = generate_keypair_from_seed(seed);
 
         let result = GenerateKeypairResult {
             secret_key: kp.sk.to_vec(),
@@ -211,10 +241,9 @@ mod tests {
 
     #[test]
     fn invalid_pk_rejected() {
-        let bad_pk = [0u8; ENCAPSULATION_KEY_SIZE];
-        // May or may not error depending on x-wing validation
-        // but if it succeeds, decapsulation with correct sk should still work
-        let _ = encapsulate(&bad_pk);
+        let bad_pk = [0xFFu8; ENCAPSULATION_KEY_SIZE];
+
+        assert!(encapsulate(&bad_pk).is_err());
     }
 
     #[test]
@@ -231,6 +260,73 @@ mod tests {
         let enc = encapsulate(&kp.pk).unwrap();
 
         assert_eq!(enc.ciphertext.len(), CIPHERTEXT_SIZE);
+    }
+
+    #[test]
+    fn seed_roundtrip() {
+        let kp = generate_keypair();
+        let seed = <&Seed<XWingKem>>::try_from(&kp.sk[..]).unwrap();
+        let derived = generate_keypair_from_seed(seed);
+
+        assert_eq!(derived.sk, kp.sk);
+        assert_eq!(derived.pk, kp.pk);
+    }
+
+    #[test]
+    fn seed_deterministic() {
+        let seed = <&Seed<XWingKem>>::try_from(&[7u8; 32][..]).unwrap();
+        let kp1 = generate_keypair_from_seed(seed);
+        let kp2 = generate_keypair_from_seed(seed);
+
+        assert_eq!(kp1.pk, kp2.pk);
+    }
+
+    #[test]
+    fn different_seeds_different_keys() {
+        let seed1 = <&Seed<XWingKem>>::try_from(&[1u8; 32][..]).unwrap();
+        let seed2 = <&Seed<XWingKem>>::try_from(&[2u8; 32][..]).unwrap();
+
+        assert_ne!(
+            generate_keypair_from_seed(seed1).pk,
+            generate_keypair_from_seed(seed2).pk
+        );
+    }
+
+    #[test]
+    fn seed_derived_pk_works_with_original_sk() {
+        let kp = generate_keypair();
+        let seed = <&Seed<XWingKem>>::try_from(&kp.sk[..]).unwrap();
+        let derived = generate_keypair_from_seed(seed);
+        let enc = encapsulate(&derived.pk).unwrap();
+        let ss = decapsulate(&kp.sk, &enc.ciphertext);
+
+        assert_eq!(enc.shared_key, *ss);
+    }
+
+    #[test]
+    fn tampered_mlkem_part_wrong_shared_key() {
+        let kp = generate_keypair();
+        let enc = encapsulate(&kp.pk).unwrap();
+
+        let mut ct = enc.ciphertext;
+        ct[0] ^= 0x01;
+
+        let ss = decapsulate(&kp.sk, &ct);
+
+        assert_ne!(enc.shared_key, *ss);
+    }
+
+    #[test]
+    fn tampered_x25519_part_wrong_shared_key() {
+        let kp = generate_keypair();
+        let enc = encapsulate(&kp.pk).unwrap();
+
+        let mut ct = enc.ciphertext;
+        ct[CIPHERTEXT_SIZE - 1] ^= 0x01;
+
+        let ss = decapsulate(&kp.sk, &ct);
+
+        assert_ne!(enc.shared_key, *ss);
     }
 }
 
@@ -323,5 +419,101 @@ mod wasm_tests {
 
         assert_eq!(enc.ciphertext.len(), 1120);
         assert_eq!(enc.shared_key.len(), 32);
+    }
+
+    #[wasm_bindgen_test]
+    fn rejects_wrong_seed_length() {
+        assert!(generate_keypair_seed_wasm(&[0u8; 31]).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_seed_roundtrip() {
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let derived = generate_keypair_seed_wasm(&kp.secret_key)
+            .unwrap()
+            .to_rust()
+            .unwrap();
+
+        assert_eq!(derived.secret_key, kp.secret_key);
+        assert_eq!(derived.public_key, kp.public_key);
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_seed_deterministic() {
+        let seed = [7u8; 32];
+        let kp1 = generate_keypair_seed_wasm(&seed)
+            .unwrap()
+            .to_rust()
+            .unwrap();
+        let kp2 = generate_keypair_seed_wasm(&seed)
+            .unwrap()
+            .to_rust()
+            .unwrap();
+
+        assert_eq!(kp1.public_key, kp2.public_key);
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_different_seeds_different_keys() {
+        let kp1 = generate_keypair_seed_wasm(&[1u8; 32])
+            .unwrap()
+            .to_rust()
+            .unwrap();
+        let kp2 = generate_keypair_seed_wasm(&[2u8; 32])
+            .unwrap()
+            .to_rust()
+            .unwrap();
+
+        assert_ne!(kp1.public_key, kp2.public_key);
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_seed_derived_pk_works_with_original_sk() {
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let derived = generate_keypair_seed_wasm(&kp.secret_key)
+            .unwrap()
+            .to_rust()
+            .unwrap();
+        let enc = encapsulate(&derived.public_key).unwrap().to_rust().unwrap();
+        let ss = decapsulate(&kp.secret_key, &enc.ciphertext).unwrap();
+
+        assert_eq!(enc.shared_key, ss);
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_seed_too_long() {
+        assert!(generate_keypair_seed_wasm(&[0u8; 33]).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_seed_empty() {
+        assert!(generate_keypair_seed_wasm(&[]).is_err());
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_tampered_ciphertext_wrong_shared_key() {
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let enc = encapsulate(&kp.public_key).unwrap().to_rust().unwrap();
+
+        let mut ct = enc.ciphertext.clone();
+        ct[0] ^= 0x01;
+
+        let ss = decapsulate(&kp.secret_key, &ct).unwrap();
+
+        assert_ne!(enc.shared_key, ss);
+    }
+
+    #[wasm_bindgen_test]
+    fn wasm_tampered_x25519_part_wrong_shared_key() {
+        let kp = generate_keypair_wasm().unwrap().to_rust().unwrap();
+        let enc = encapsulate(&kp.public_key).unwrap().to_rust().unwrap();
+
+        let mut ct = enc.ciphertext.clone();
+        let last = ct.len() - 1;
+        ct[last] ^= 0x01;
+
+        let ss = decapsulate(&kp.secret_key, &ct).unwrap();
+
+        assert_ne!(enc.shared_key, ss);
     }
 }
